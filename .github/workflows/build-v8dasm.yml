@@ -121,10 +121,66 @@ jobs:
           path: v8/v8/v8dasm-${{ matrix.version.v8 }}.exe
           retention-days: 30
 
+  build-android-arm64:
+    name: Android ARM64 - V8 ${{ matrix.version.v8 }}
+    runs-on: ubuntu-latest
+    needs: prepare
+    strategy:
+      matrix: ${{fromJson(needs.prepare.outputs.matrix)}}
+      fail-fast: false
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential \
+            curl \
+            git \
+            lld \
+            pkg-config \
+            python3 \
+            python3-pip \
+            xz-utils \
+            zip
+          pip3 install setuptools
+
+      - name: Cache Depot Tools
+        uses: actions/cache@v4
+        with:
+          path: depot_tools
+          key: depot-tools-android-arm64-${{ runner.os }}
+
+      - name: Cache V8 Source
+        uses: actions/cache@v4
+        with:
+          path: v8
+          key: v8-source-${{ matrix.version.v8 }}-android-arm64
+          restore-keys: |
+            v8-source-${{ matrix.version.v8 }}-android-
+
+      - name: Build v8dasm
+        run: |
+          chmod +x scripts/v8dasm-builders/build-android-arm64.sh
+          scripts/v8dasm-builders/build-android-arm64.sh ${{ matrix.version.v8 }} "${{ matrix.version.args }}"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: v8dasm-android-arm64-v${{ matrix.version.v8 }}
+          path: v8/v8/v8dasm-${{ matrix.version.v8 }}-android-arm64
+          retention-days: 30
+
   release:
     name: Create Release
     runs-on: ubuntu-latest
-    needs: [build-macos-arm, build-windows]
+    needs: [build-macos-arm, build-windows, build-android-arm64]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     steps:
       - uses: actions/checkout@v4
@@ -147,6 +203,8 @@ jobs:
             # 查找带版本号的文件
             if [ -f v8dasm-${version}.exe ]; then
               zip ../../release/${platform}-${version}.zip v8dasm-${version}.exe
+            elif [ -f v8dasm-${version}-android-arm64 ]; then
+              zip ../../release/${platform}-${version}.zip v8dasm-${version}-android-arm64
             elif [ -f v8dasm-${version} ]; then
               zip ../../release/${platform}-${version}.zip v8dasm-${version}
             fi
@@ -166,6 +224,7 @@ jobs:
           ### 支持的平台:
           - macOS Apple Silicon (ARM64)
           - Windows x64
+          - Android ARM64
 
           ### 使用方法:
           下载适合您平台和 V8 版本的二进制文件，然后配合 View8 使用:
