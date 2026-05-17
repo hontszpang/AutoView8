@@ -2,6 +2,22 @@ diff --git a/src/d8/d8.cc b/src/d8/d8.cc
 index 715ee06c0d0..c13dec0d5ba 100644
 --- a/src/d8/d8.cc
 +++ b/src/d8/d8.cc
+@@ -16,6 +16,7 @@
+ #include <tuple>
+ #include <type_traits>
+ #include <unordered_map>
++#include <unordered_set>
+ #include <utility>
+ #include <vector>
+ 
+@@ -37,6 +38,7 @@
+ #include "src/base/platform/time.h"
+ #include "src/base/platform/wrappers.h"
+ #include "src/base/sanitizer/msan.h"
++#include "src/codegen/script-details.h"
+ #include "src/base/sys-info.h"
+ #include "src/base/utils/random-number-generator.h"
+ #include "src/compiler-dispatcher/optimizing-compile-dispatcher.h"
 @@ -2210,6 +2210,127 @@ void Shell::RealmSharedSet(Local<Name> property, Local<Value> value,
    data->realm_shared_.Reset(isolate, value);
  }
