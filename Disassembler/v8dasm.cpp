@@ -135,11 +135,11 @@ int main(int argc, char* argv[]) {
     return 2;
   }
 
-  V8::SetFlagsFromString(
-      "--no-lazy "
-      "--no-flush-bytecode "
-      "--no-verify-snapshot-checksum "
-      "--no-enable-lazy-source-positions");
+  const char* default_flags = std::getenv("V8DASM_DEFAULT_FLAGS");
+  if (default_flags != nullptr && default_flags[0] != '\0') {
+    V8::SetFlagsFromString(default_flags);
+    std::cout << "[v8dasm] default flags: " << default_flags << "\n";
+  }
   const char* extra_flags = std::getenv("V8DASM_EXTRA_FLAGS");
   if (extra_flags != nullptr && extra_flags[0] != '\0') {
     V8::SetFlagsFromString(extra_flags);
