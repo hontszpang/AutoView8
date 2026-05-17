@@ -3,7 +3,7 @@
     {
       "v8_version": "12.4.254.21",
       "node_version": "game-libssr",
-      "build_args": "v8_enable_pointer_compression=false v8_enable_sandbox=false"
+      "build_args": "v8_enable_pointer_compression=true v8_enable_sandbox=true"
     }
   ]
 }
