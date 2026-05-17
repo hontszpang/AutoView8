@@ -74,6 +74,17 @@ bash "$WORKSPACE_DIR/scripts/v8dasm-builders/patch-utils/apply-patch.sh" \
     "$PATCH_LOG" \
     "true"
 
+echo "=====[ Applying Android d8 loadjsc compatibility fixes ]====="
+python3 - <<'PY'
+from pathlib import Path
+
+d8cc = Path("src/d8/d8.cc")
+text = d8cc.read_text(encoding="utf-8")
+if "#include <unordered_set>" not in text:
+    text = text.replace("#include <unordered_map>\n", "#include <unordered_map>\n#include <unordered_set>\n", 1)
+d8cc.write_text(text, encoding="utf-8")
+PY
+
 echo "=====[ Adding Android v8dasm GN target ]====="
 cp "$WORKSPACE_DIR/Disassembler/v8dasm.cpp" tools/v8dasm.cpp
 
