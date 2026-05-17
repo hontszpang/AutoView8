@@ -170,7 +170,7 @@ jobs:
           restore-keys: |
             v8-source-${{ matrix.version.v8 }}-android-
 
-      - name: Build v8dasm
+      - name: Build v8dasm and patched d8
         run: |
           chmod +x scripts/v8dasm-builders/build-android-arm64.sh
           scripts/v8dasm-builders/build-android-arm64.sh ${{ matrix.version.v8 }} "${{ matrix.version.args }}"
@@ -179,7 +179,9 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: v8dasm-android-arm64-v${{ matrix.version.v8 }}
-          path: v8/v8/v8dasm-${{ matrix.version.v8 }}-android-arm64
+          path: |
+            v8/v8/v8dasm-${{ matrix.version.v8 }}-android-arm64
+            v8/v8/d8-${{ matrix.version.v8 }}-android-arm64
           retention-days: 30
 
   release:
@@ -209,7 +211,7 @@ jobs:
             if [ -f v8dasm-${version}.exe ]; then
               zip ../../release/${platform}-${version}.zip v8dasm-${version}.exe
             elif [ -f v8dasm-${version}-android-arm64 ]; then
-              zip ../../release/${platform}-${version}.zip v8dasm-${version}-android-arm64
+              zip ../../release/${platform}-${version}.zip v8dasm-${version}-android-arm64 d8-${version}-android-arm64
             elif [ -f v8dasm-${version} ]; then
               zip ../../release/${platform}-${version}.zip v8dasm-${version}
             fi

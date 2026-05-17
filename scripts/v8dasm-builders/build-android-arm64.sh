@@ -106,19 +106,26 @@ fi
 echo "GN Args: $GN_ARGS"
 gn gen out.gn/android_arm64.release --args="$GN_ARGS"
 
-echo "=====[ Building Android ARM64 v8dasm ]====="
-ninja -C out.gn/android_arm64.release v8dasm
+echo "=====[ Building Android ARM64 v8dasm and patched d8 ]====="
+ninja -C out.gn/android_arm64.release v8dasm d8
 
 OUTPUT_NAME="v8dasm-$V8_VERSION-android-arm64"
 cp out.gn/android_arm64.release/v8dasm "$OUTPUT_NAME"
 chmod +x "$OUTPUT_NAME"
 
-if [ -f "$OUTPUT_NAME" ]; then
+D8_OUTPUT_NAME="d8-$V8_VERSION-android-arm64"
+cp out.gn/android_arm64.release/d8 "$D8_OUTPUT_NAME"
+chmod +x "$D8_OUTPUT_NAME"
+
+if [ -f "$OUTPUT_NAME" ] && [ -f "$D8_OUTPUT_NAME" ]; then
     echo "=====[ Build Successful ]====="
     ls -lh "$OUTPUT_NAME"
+    ls -lh "$D8_OUTPUT_NAME"
     file "$OUTPUT_NAME"
+    file "$D8_OUTPUT_NAME"
     echo "Built: $V8_DIR/$OUTPUT_NAME"
+    echo "Built: $V8_DIR/$D8_OUTPUT_NAME"
 else
-    echo "ERROR: $OUTPUT_NAME binary not found!"
+    echo "ERROR: expected output binary not found!"
     exit 1
 fi
