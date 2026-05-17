@@ -44,20 +44,24 @@ ScriptOrigin CreateScriptOrigin(Args&&... args) {
 
 static void loadBytecode(uint8_t* bytecodeBuffer, int length) {
   std::cout << "[v8dasm] cached data size: " << length << " bytes\n";
+  std::cout << "[v8dasm] creating CachedData\n" << std::flush;
 
   // Load code into code cache.
   ScriptCompiler::CachedData* cached_data =
       new ScriptCompiler::CachedData(bytecodeBuffer, length);
 
   // Create dummy source.
+  std::cout << "[v8dasm] creating dummy source\n" << std::flush;
   ScriptOrigin origin = CreateScriptOrigin(String::NewFromUtf8Literal(isolate, "code.jsc"));
 
   ScriptCompiler::Source source(String::NewFromUtf8Literal(isolate, "\"ಠ_ಠ\""),
                                 origin, cached_data);
 
   // Compile code from code cache to print disassembly.
+  std::cout << "[v8dasm] CompileUnboundScript begin\n" << std::flush;
   MaybeLocal<UnboundScript> script = ScriptCompiler::CompileUnboundScript(
       isolate, &source, ScriptCompiler::kConsumeCodeCache);
+  std::cout << "[v8dasm] CompileUnboundScript end\n" << std::flush;
   if (script.IsEmpty()) {
     std::cout << "[v8dasm] compile returned empty script"
               << ", rejected=" << cached_data->rejected << "\n";
@@ -117,6 +121,7 @@ int main(int argc, char* argv[]) {
             << std::hex << flag_hash << std::dec << "\n";
   std::cout << "[v8dasm] CpuFeatures::SupportedFeatures=0x"
             << std::hex << cpu_features << std::dec << "\n";
+  std::cout << std::flush;
   const char* print_flag_values = std::getenv("V8DASM_PRINT_FLAG_VALUES");
   if (print_flag_values != nullptr && print_flag_values[0] != '\0') {
     std::cout << "[v8dasm] FlagList::PrintValues begin\n";
