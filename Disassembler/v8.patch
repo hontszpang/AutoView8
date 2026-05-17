@@ -1,19 +1,317 @@
+diff --git a/src/d8/d8.cc b/src/d8/d8.cc
+index 715ee06c0d0..c13dec0d5ba 100644
+--- a/src/d8/d8.cc
++++ b/src/d8/d8.cc
+@@ -2210,6 +2210,127 @@ void Shell::RealmSharedSet(Local<Name> property, Local<Value> value,
+   data->realm_shared_.Reset(isolate, value);
+ }
+
++
++
++
++
++
++
++// 在 d8.cc 文件顶部，如果还没包含的话
++#include <iostream>
++
++// 修正后的 Disassemble 函数
++static void Disassemble(v8::internal::Isolate* isolate,
++                        v8::internal::Tagged<v8::internal::BytecodeArray> bytecode,
++                        std::unordered_set<uintptr_t>& visited,
++                        int depth) {
++  if (depth > 100) {
++    //v8::internal::PrintF("Recursion depth limit reached, aborting disassembly for this path.\n");
++    //fflush(stdout);
++    return;
++  }
++
++  uintptr_t key = reinterpret_cast<uintptr_t>(bytecode.ptr());
++  if (visited.count(key)) {
++    return;
++  }
++  visited.insert(key);
++
++  // 使用 V8 的 PrintF 替代 std::cout，并添加 \n 和 fflush
++  for (int i = 0; i < depth; ++i) v8::internal::PrintF("  ");
++  //v8::internal::PrintF("Disassembling BytecodeArray at: %p\n", reinterpret_cast<void*>(bytecode.ptr()));
++  //fflush(stdout);
++
++  // 这行是 V8 自己的反汇编输出，它使用 OFStream，是安全的
++  //v8::internal::OFStream os(stdout);
++  //bytecode->Disassemble(os);
++
++  auto consts = bytecode->constant_pool();
++
++  //for (int i = 0; i < depth; ++i) v8::internal::PrintF("  ");
++  //v8::internal::PrintF("Constant pool size: %d\n", consts->length());
++  //fflush(stdout);
++
++  for (int i = 0; i < consts->length(); i++) {
++    auto obj = consts->get(i);
++    if (v8::internal::IsSharedFunctionInfo(obj)) {
++      auto shared = v8::internal::SharedFunctionInfo::cast(obj);
++
++      //for (int i = 0; i < depth; ++i) v8::internal::PrintF("  ");
++      //v8::internal::PrintF("--> Found SFI in constant pool at index %d: ", i);
++
++      auto function_name = shared->Name();
++      if (function_name->length() > 0) {
++          //v8::internal::PrintF("%s\n", function_name->ToCString().get());
++      } else {
++          //v8::internal::PrintF("(anonymous)\n");
++      }
++      //fflush(stdout);
++
++      if (shared->HasBytecodeArray()) {
++          Disassemble(isolate, shared->GetBytecodeArray(isolate), visited, depth + 1);
++      } else {
++          //for (int i = 0; i < depth; ++i) v8::internal::PrintF("  ");
++          //v8::internal::PrintF("    (SFI has no bytecode array, skipping)\n");
++          //fflush(stdout);
++      }
++    }
++  }
++}
++
++// 修正后的 LoadJSC 函数
++void v8::Shell::LoadJSC(const v8::FunctionCallbackInfo<v8::Value>& args) {
++  auto isolate = reinterpret_cast<v8::internal::Isolate*>(args.GetIsolate());
++  for (int i = 0; i < args.Length(); i++) {
++    v8::String::Utf8Value filename(args.GetIsolate(), args[i]);
++    if (*filename == NULL) {
++      args.GetIsolate()->ThrowException(v8::Exception::Error(
++          v8::String::NewFromUtf8(args.GetIsolate(), "Error loading file").ToLocalChecked()));
++      return;
++    }
++    int length = 0;
++    auto filedata = reinterpret_cast<uint8_t*>(ReadChars(*filename, &length));
++    if (filedata == NULL) {
++      args.GetIsolate()->ThrowException(v8::Exception::Error(
++          v8::String::NewFromUtf8(args.GetIsolate(), "Error reading file").ToLocalChecked()));
++      return;
++    }
++    v8::internal::AlignedCachedData cached_data(filedata, length);
++    auto source = isolate->factory()
++                      ->NewStringFromUtf8(base::CStrVector("source"))
++                      .ToHandleChecked();
++    v8::internal::ScriptDetails script_details;
++    v8::internal::MaybeHandle<v8::internal::SharedFunctionInfo> maybe_fun =
++      v8::internal::CodeSerializer::Deserialize(isolate, &cached_data, source, script_details);
++
++    v8::internal::Handle<v8::internal::SharedFunctionInfo> fun;
++    if (!maybe_fun.ToHandle(&fun)) {
++      args.GetIsolate()->ThrowException(v8::Exception::Error(
++          v8::String::NewFromUtf8(args.GetIsolate(), "Deserialize failed, possibly version mismatch or invalid .jsc file").ToLocalChecked()));
++      delete[] filedata;
++      return;
++    }
++
++    //v8::internal::PrintF("---- Starting disassembly of %s ----\n", *filename);
++    fflush(stdout);
++
++    std::unordered_set<uintptr_t> visited;
++    Disassemble(isolate, fun->GetBytecodeArray(isolate), visited, 0);
++
++    //v8::internal::PrintF("---- Finished disassembly of %s ----\n", *filename);
++    fflush(stdout);
++
++    delete[] filedata;
++  }
++}
++
++
++
++
++
++
++
++
+ void Shell::LogGetAndStop(const v8::FunctionCallbackInfo<v8::Value>& info) {
+   DCHECK(i::ValidateCallbackInfo(info));
+   Isolate* isolate = info.GetIsolate();
+@@ -3318,6 +3439,10 @@ Local<ObjectTemplate> Shell::CreateGlobalTemplate(Isolate* isolate) {
+                        FunctionTemplate::New(isolate, ReadLine));
+   global_template->Set(isolate, "load",
+                        FunctionTemplate::New(isolate, ExecuteFile));
++  global_template->Set(
++    v8::String::NewFromUtf8(isolate, "loadjsc", v8::NewStringType::kNormal)
++        .ToLocalChecked(),
++    v8::FunctionTemplate::New(isolate, v8::Shell::LoadJSC));
+   global_template->Set(isolate, "setTimeout",
+                        FunctionTemplate::New(isolate, SetTimeout));
+   // Some Emscripten-generated code tries to call 'quit', which in turn would
+diff --git a/src/d8/d8.h b/src/d8/d8.h
+index b1388f129b8..86823c143d4 100644
+--- a/src/d8/d8.h
++++ b/src/d8/d8.h
+@@ -505,6 +505,10 @@ class Shell : public i::AllStatic {
+   static void ReportException(Isolate* isolate, Local<Message> message,
+                               Local<Value> exception);
+   static void ReportException(Isolate* isolate, const TryCatch& try_catch);
++
++
++  static void LoadJSC(const v8::FunctionCallbackInfo<v8::Value>& args);
++
+   static MaybeLocal<String> ReadFile(Isolate* isolate, const char* name,
+                                      bool should_throw = true);
+   static Local<String> WasmLoadSourceMapCallback(Isolate* isolate,
+diff --git a/src/diagnostics/objects-printer.cc b/src/diagnostics/objects-printer.cc
+index 7677022ce31..c2e6f46d24d 100644
+--- a/src/diagnostics/objects-printer.cc
++++ b/src/diagnostics/objects-printer.cc
+@@ -2022,7 +2022,7 @@ void SharedFunctionInfo::SharedFunctionInfoPrint(std::ostream& os) {
+   } else {
+     os << kUnavailableString;
+   }
+-  PrintSourceCode(os);
++  //PrintSourceCode(os);
+   // Script files are often large, thus only print their {Brief} representation.
+   os << "\n - script: " << Brief(script());
+   os << "\n - function token position: " << function_token_position();
+@@ -2043,6 +2043,10 @@ void SharedFunctionInfo::SharedFunctionInfoPrint(std::ostream& os) {
+   os << "\n - unique_id: " << unique_id();
+   os << "\n - age: " << age();
+   os << "\n";
++  os << "\nStart BytecodeArray\n";
++  this->GetActiveBytecodeArray(isolate)->Disassemble(os);
++  os << "\nEnd BytecodeArray\n";
++  os << std::flush;
+ }
+
+ void JSGlobalProxy::JSGlobalProxyPrint(std::ostream& os) {
+@@ -2964,6 +2968,33 @@ void HeapObject::Print(Tagged<Object> obj, std::ostream& os) {
+
+ void HeapObject::HeapObjectShortPrint(std::ostream& os) {
+   PtrComprCageBase cage_base = GetPtrComprCageBase();
++
++  // --- START OF OUR MODIFICATION (FINAL VERSION) ---
++  Isolate* isolate = nullptr;
++  if (!GetIsolateFromHeapObject(*this, &isolate) || isolate == nullptr) {
++    os << "<unknown>";
++    return;
++  }
++
++  // Now that we have the isolate, we can get the ReadOnlyRoots.
++  ReadOnlyRoots roots(isolate);
++  // Get the map of the current object using the correct API.
++  Tagged<Map> map_of_this_object = this->map(cage_base);
++
++  // Add an extra-safe check: A valid map pointer should not be null.
++  if (map_of_this_object.ptr() == kNullAddress) {
++    os << "<unknown>";
++    return;
++  }
++
++  // Check if the map's map is the meta_map. This is a strong indication
++  // that the object we are trying to print is valid.
++  if (map_of_this_object->map(cage_base) != roots.meta_map()) {
++    os << "<unknown>";
++    return;
++  }
++  // --- END OF OUR MODIFICATION ---
++
+   os << AsHex::Address(this->ptr()) << " ";
+
+   if (IsString(*this, cage_base)) {
+@@ -2973,6 +3004,13 @@ void HeapObject::HeapObjectShortPrint(std::ostream& os) {
+     os << accumulator.ToCString().get();
+     return;
+   }
++
++
++
++
++
++
++
+   if (IsJSObject(*this, cage_base)) {
+     HeapStringAllocator allocator;
+     StringStream accumulator(&allocator);
+@@ -3072,14 +3110,24 @@ void HeapObject::HeapObjectShortPrint(std::ostream& os) {
+       break;
+     case FIXED_ARRAY_TYPE:
+       os << "<FixedArray[" << FixedArray::cast(*this)->length() << "]>";
++      os << "\nStart FixedArray\n";
++      FixedArray::cast(*this)->FixedArrayPrint(os);
++      os << "\nEnd FixedArray\n";
+       break;
+     case OBJECT_BOILERPLATE_DESCRIPTION_TYPE:
+       os << "<ObjectBoilerplateDescription["
+          << ObjectBoilerplateDescription::cast(*this)->capacity() << "]>";
++      os << "\nStart ObjectBoilerplateDescription\n";
++      ObjectBoilerplateDescription::cast(*this)
++          ->ObjectBoilerplateDescriptionPrint(os);
++      os << "\nEnd ObjectBoilerplateDescription\n";
+       break;
+     case FIXED_DOUBLE_ARRAY_TYPE:
+       os << "<FixedDoubleArray[" << FixedDoubleArray::cast(*this)->length()
+          << "]>";
++      os << "\nStart FixedDoubleArray\n";
++      FixedDoubleArray::cast(*this)->FixedDoubleArrayPrint(os);
++      os << "\nEnd FixedDoubleArray\n";
+       break;
+     case BYTE_ARRAY_TYPE:
+       os << "<ByteArray[" << ByteArray::cast(*this)->length() << "]>";
+@@ -3156,12 +3204,20 @@ void HeapObject::HeapObjectShortPrint(std::ostream& os) {
+
+     case SHARED_FUNCTION_INFO_TYPE: {
+       Tagged<SharedFunctionInfo> shared = SharedFunctionInfo::cast(*this);
++      Tagged<Object> name_obj = shared->Name();
++      if (IsString(name_obj)) {
+       std::unique_ptr<char[]> debug_name = shared->DebugNameCStr();
+       if (debug_name[0] != '\0') {
+         os << "<SharedFunctionInfo " << debug_name.get() << ">";
++        } else {
++          os << "<SharedFunctionInfo>";
++        }
+       } else {
+         os << "<SharedFunctionInfo>";
+       }
++      os << "\nStart SharedFunctionInfo\n";
++      shared->SharedFunctionInfoPrint(os);
++      os << "\nEnd SharedFunctionInfo\n";
+       break;
+     }
+     case JS_MESSAGE_OBJECT_TYPE:
+diff --git a/src/flags/flags.cc b/src/flags/flags.cc
+index 1eb183bf07f..516c1e0477f 100644
+--- a/src/flags/flags.cc
++++ b/src/flags/flags.cc
+@@ -12,6 +12,7 @@
+ #include <cstdlib>
+ #include <cstring>
+ #include <iomanip>
++#include <iostream>
+ #include <set>
+ #include <sstream>
+
+@@ -508,6 +509,9 @@ uint32_t ComputeFlagListHash() {
+ #endif
+
+   std::string args(modified_args_as_string.str());
++  std::cout << "[v8dasm] ComputeFlagListHash input_len=" << args.size()
++            << " input=" << args << "\n"
++            << std::flush;
+   // Generate a hash that is not 0.
+   uint32_t hash = static_cast<uint32_t>(base::hash_range(
+                       args.c_str(), args.c_str() + args.length())) |
 diff --git a/src/objects/bytecode-array.cc b/src/objects/bytecode-array.cc
 index fd1d8f33432..c8255c8dd01 100644
 --- a/src/objects/bytecode-array.cc
 +++ b/src/objects/bytecode-array.cc
 @@ -4,6 +4,7 @@
- 
+
  #include "src/objects/bytecode-array.h"
- 
+
 +#include <cstdlib>
  #include <iomanip>
- 
+
  #include "src/codegen/handler-table.h"
 @@ -138,21 +139,55 @@ void BytecodeArray::Disassemble(Handle<BytecodeArray> handle,
    }
  #endif
- 
+
 -  os << "Handler Table (size = " << handle->handler_table()->length() << ")\n";
 +  int max_handler_table =
 +      std::getenv("V8DASM_MAX_HANDLER_TABLE_BYTES") == nullptr
@@ -40,7 +338,7 @@ index fd1d8f33432..c8255c8dd01 100644
      table.HandlerTableRangePrint(os);
    }
  #endif
- 
+
 -  Tagged<TrustedByteArray> source_position_table =
 -      handle->SourcePositionTable();
 -  os << "Source Position Table (size = " << source_position_table->length()
@@ -74,78 +372,45 @@ index fd1d8f33432..c8255c8dd01 100644
    }
  #endif
  }
-diff --git a/src/flags/flags.cc b/src/flags/flags.cc
-index 7940f397fb0..f3f48fd4c8c 100644
---- a/src/flags/flags.cc
-+++ b/src/flags/flags.cc
-@@ -12,6 +12,7 @@
- #include <cstring>
- #include <iomanip>
-+#include <iostream>
- #include <set>
- #include <sstream>
- 
- #include "src/base/functional.h"
-@@ -508,6 +509,9 @@ uint32_t ComputeFlagListHash() {
- #endif
- 
-   std::string args(modified_args_as_string.str());
-+  std::cout << "[v8dasm] ComputeFlagListHash input_len=" << args.size()
-+            << " input=" << args << "\n"
-+            << std::flush;
-   // Generate a hash that is not 0.
-   uint32_t hash = static_cast<uint32_t>(base::hash_range(
-                       args.c_str(), args.c_str() + args.length())) |
 diff --git a/src/objects/string.cc b/src/objects/string.cc
-index 3bfb418520a..72852f678fe 100644
+index 3bfb418520a..603dc4a5d4d 100644
 --- a/src/objects/string.cc
 +++ b/src/objects/string.cc
-@@ -659,13 +659,6 @@ void String::StringShortPrint(StringStream* accumulator) {
+@@ -659,12 +659,12 @@ void String::StringShortPrint(StringStream* accumulator) {
    accumulator->Add("<String[%u]: ", len);
    accumulator->Add(PrefixForDebugPrint());
- 
+
 -  if (len > kMaxShortPrintLength) {
 -    accumulator->Add("...<truncated>>");
 -    accumulator->Add(SuffixForDebugPrint());
 -    accumulator->Put('>');
 -    return;
 -  }
--
++  //if (len > kMaxShortPrintLength) {
++  //  accumulator->Add("...<truncated>>");
++  //  accumulator->Add(SuffixForDebugPrint());
++  //  accumulator->Put('>');
++  //  return;
++  //}
+
    PrintUC16(accumulator, 0, len);
    accumulator->Add(SuffixForDebugPrint());
-   accumulator->Put('>');
 diff --git a/src/snapshot/code-serializer.cc b/src/snapshot/code-serializer.cc
-index 23463d26b63..043101d1d53 100644
+index 23463d26b63..304d323029d 100644
 --- a/src/snapshot/code-serializer.cc
 +++ b/src/snapshot/code-serializer.cc
-@@ -4,6 +4,7 @@
- 
- #include "src/snapshot/code-serializer.h"
- 
-+#include <iostream>
- #include <memory>
- 
- #include "src/base/logging.h"
-@@ -473,6 +474,18 @@ MaybeHandle<SharedFunctionInfo> CodeSerializer::Deserialize(
+@@ -472,6 +472,10 @@ MaybeHandle<SharedFunctionInfo> CodeSerializer::Deserialize(
+     if (v8_flags.profile_deserialization) PrintF("[Deserializing failed]\n");
      return MaybeHandle<SharedFunctionInfo>();
    }
- 
 +  std::cout << "\nStart SharedFunctionInfo\n";
-+  std::cout << "<SharedFunctionInfo>\n";
-+  if (result->HasBytecodeArray()) {
-+    std::cout << "Start BytecodeArray\n";
-+    result->GetActiveBytecodeArray(isolate)->Disassemble(std::cout);
-+    std::cout << "End BytecodeArray\n";
-+  } else {
-+    std::cout << "[v8dasm] SharedFunctionInfo has no active bytecode array\n";
-+  }
-+  std::cout << "End SharedFunctionInfo\n";
++  result->SharedFunctionInfoPrint(std::cout);
++  std::cout << "\nEnd SharedFunctionInfo\n";
 +  std::cout << std::flush;
-+
+
    // Check whether the newly deserialized data should be merged into an
    // existing Script from the Isolate compilation cache. If so, perform
-   // the merge in a single-threaded manner since this deserialization was
-@@ -687,10 +700,7 @@ SerializedCodeData::SerializedCodeData(const std::vector<uint8_t>* payload,
+@@ -687,10 +691,7 @@ SerializedCodeData::SerializedCodeData(const std::vector<uint8_t>* payload,
  SerializedCodeSanityCheckResult SerializedCodeData::SanityCheck(
      uint32_t expected_ro_snapshot_checksum,
      uint32_t expected_source_hash) const {
@@ -155,17 +420,206 @@ index 23463d26b63..043101d1d53 100644
 -  return SanityCheckJustSource(expected_source_hash);
 +  return SerializedCodeSanityCheckResult::kSuccess;
  }
- 
+
  SerializedCodeSanityCheckResult SerializedCodeData::SanityCheckJustSource(
+@@ -704,37 +705,7 @@ SerializedCodeSanityCheckResult SerializedCodeData::SanityCheckJustSource(
+
+ SerializedCodeSanityCheckResult SerializedCodeData::SanityCheckWithoutSource(
+     uint32_t expected_ro_snapshot_checksum) const {
+-  if (size_ < kHeaderSize) {
+-    return SerializedCodeSanityCheckResult::kInvalidHeader;
+-  }
+-  uint32_t magic_number = GetMagicNumber();
+-  if (magic_number != kMagicNumber) {
+-    return SerializedCodeSanityCheckResult::kMagicNumberMismatch;
+-  }
+-  uint32_t version_hash = GetHeaderValue(kVersionHashOffset);
+-  if (version_hash != Version::Hash()) {
+-    return SerializedCodeSanityCheckResult::kVersionMismatch;
+-  }
+-  uint32_t flags_hash = GetHeaderValue(kFlagHashOffset);
+-  if (flags_hash != FlagList::Hash()) {
+-    return SerializedCodeSanityCheckResult::kFlagsMismatch;
+-  }
+-  uint32_t ro_snapshot_checksum =
+-      GetHeaderValue(kReadOnlySnapshotChecksumOffset);
+-  if (ro_snapshot_checksum != expected_ro_snapshot_checksum) {
+-    return SerializedCodeSanityCheckResult::kReadOnlySnapshotChecksumMismatch;
+-  }
+-  uint32_t payload_length = GetHeaderValue(kPayloadLengthOffset);
+-  uint32_t max_payload_length = size_ - kHeaderSize;
+-  if (payload_length > max_payload_length) {
+-    return SerializedCodeSanityCheckResult::kLengthMismatch;
+-  }
+-  if (v8_flags.verify_snapshot_checksum) {
+-    uint32_t checksum = GetHeaderValue(kChecksumOffset);
+-    if (Checksum(ChecksummedContent()) != checksum) {
+-      return SerializedCodeSanityCheckResult::kChecksumMismatch;
+-    }
+-  }
++  // Always return kSuccess to bypass all checks.
+   return SerializedCodeSanityCheckResult::kSuccess;
+ }
+
 diff --git a/src/snapshot/deserializer.cc b/src/snapshot/deserializer.cc
-index b68a4fdd1d5..4ed3f6a3a5b 100644
+index b68a4fdd1d5..1d998f0d85a 100644
 --- a/src/snapshot/deserializer.cc
 +++ b/src/snapshot/deserializer.cc
-@@ -265,7 +265,6 @@ Deserializer<IsolateT>::Deserializer(IsolateT* isolate,
+@@ -265,7 +265,7 @@ Deserializer<IsolateT>::Deserializer(IsolateT* isolate,
  #ifdef DEBUG
    num_api_references_ = GetNumApiReferences(isolate);
  #endif  // DEBUG
 -  CHECK_EQ(magic_number_, SerializedData::kMagicNumber);
++  //CHECK_EQ(magic_number_, SerializedData::kMagicNumber);
  }
- 
+
  template <typename IsolateT>
+@@ -303,7 +303,11 @@ void Deserializer<IsolateT>::VisitRootPointers(Root root,
+ template <typename IsolateT>
+ void Deserializer<IsolateT>::Synchronize(VisitorSynchronization::SyncTag tag) {
+   static const uint8_t expected = kSynchronize;
+-  CHECK_EQ(expected, source_.Get());
++  if (deserializing_user_code()) {
++    source_.Get();  // consume but don't check
++  } else {
++    CHECK_EQ(expected, source_.Get());
++  }
+ }
+
+ template <typename IsolateT>
+@@ -624,9 +628,15 @@ Handle<HeapObject> Deserializer<IsolateT>::GetBackReferencedObject() {
+ template <typename IsolateT>
+ Handle<HeapObject> Deserializer<IsolateT>::ReadObject() {
+   Handle<HeapObject> ret;
+-  CHECK_EQ(ReadSingleBytecodeData(
+-               source_.Get(), SlotAccessorForHandle<IsolateT>(&ret, isolate())),
+-           1);
++  int result = ReadSingleBytecodeData(
++      source_.Get(), SlotAccessorForHandle<IsolateT>(&ret, isolate()));
++  if (deserializing_user_code()) {
++    if (result != 1 || ret.is_null()) {
++      ret = handle(ReadOnlyRoots(isolate()).undefined_value(), isolate());
++    }
++  } else {
++    CHECK_EQ(result, 1);
++  }
+   return ret;
+ }
+
+@@ -650,6 +660,14 @@ Handle<HeapObject> Deserializer<IsolateT>::ReadObject(SnapshotSpace space) {
+   const int size_in_tagged = source_.GetUint30();
+   const int size_in_bytes = size_in_tagged * kTaggedSize;
+
++  // Guard against invalid size (stream desync during JSC deserialization).
++  if (deserializing_user_code() && size_in_tagged <= 0) {
++    Handle<HeapObject> fallback(
++        ReadOnlyRoots(isolate()).undefined_value(), isolate());
++    back_refs_.push_back(fallback);
++    return fallback;
++  }
++
+   // The map can't be a forward ref. If you want the map to be a forward ref,
+   // then you're probably serializing the meta-map, in which case you want to
+   // use the kNewContextlessMetaMap/kNewContextfulMetaMap bytecode.
+@@ -657,6 +675,11 @@ Handle<HeapObject> Deserializer<IsolateT>::ReadObject(SnapshotSpace space) {
+   Handle<Map> map = Handle<Map>::cast(ReadObject());
+
+   AllocationType allocation = SpaceToAllocation(space);
++  // When deserializing user code (JSC), redirect ReadOnly allocations to Old
++  // space since the ReadOnlySpace is sealed and memory-protected after boot.
++  if (deserializing_user_code() && allocation == AllocationType::kReadOnly) {
++    allocation = AllocationType::kOld;
++  }
+
+   // When sharing a string table, all in-place internalizable and internalized
+   // strings internalized strings are allocated in the shared heap.
+@@ -765,8 +788,12 @@ Handle<HeapObject> Deserializer<IsolateT>::ReadMetaMap(SnapshotSpace space) {
+   const int size_in_bytes = Map::kSize;
+   const int size_in_tagged = size_in_bytes / kTaggedSize;
+
++  AllocationType meta_alloc = SpaceToAllocation(space);
++  if (deserializing_user_code() && meta_alloc == AllocationType::kReadOnly) {
++    meta_alloc = AllocationType::kOld;
++  }
+   Tagged<HeapObject> raw_obj =
+-      Allocate(SpaceToAllocation(space), size_in_bytes, kTaggedAligned);
++      Allocate(meta_alloc, size_in_bytes, kTaggedAligned);
+   raw_obj->set_map_after_allocation(Map::unchecked_cast(raw_obj));
+   MemsetTagged(raw_obj->RawField(kTaggedSize),
+                Smi::uninitialized_deserialization_value(), size_in_tagged - 1);
+@@ -788,7 +815,8 @@ template <typename IsolateT>
+ template <typename SlotAccessor>
+ int Deserializer<IsolateT>::ReadRepeatedObject(SlotAccessor slot_accessor,
+                                                int repeat_count) {
+-  CHECK_LE(2, repeat_count);
++  CHECK_IMPLIES(!deserializing_user_code(), 2 <= repeat_count);
++  if (deserializing_user_code() && repeat_count < 2) repeat_count = 2;
+
+   Handle<HeapObject> heap_object = ReadObject();
+   DCHECK(!Heap::InYoungGeneration(*heap_object));
+@@ -843,7 +871,7 @@ void Deserializer<IsolateT>::ReadData(Handle<HeapObject> object,
+     current += ReadSingleBytecodeData(
+         data, SlotAccessorForHeapObject::ForSlotIndex(object, current));
+   }
+-  CHECK_EQ(current, end_slot_index);
++  CHECK_IMPLIES(!deserializing_user_code(), current == end_slot_index);
+ }
+
+ template <typename IsolateT>
+@@ -854,7 +882,7 @@ void Deserializer<IsolateT>::ReadData(FullMaybeObjectSlot start,
+     uint8_t data = source_.Get();
+     current += ReadSingleBytecodeData(data, SlotAccessorForRootSlots(current));
+   }
+-  CHECK_EQ(current, end);
++  CHECK_IMPLIES(!deserializing_user_code(), current == end);
+ }
+
+ template <typename IsolateT>
+@@ -893,6 +921,7 @@ int Deserializer<IsolateT>::ReadSingleBytecodeData(uint8_t data,
+     case kSynchronize:
+       //  If we get here then that indicates that you have a mismatch between
+       //  the number of GC roots when serializing and deserializing.
++      if (deserializing_user_code()) return 0;
+       UNREACHABLE();
+     case kVariableRawData:
+       return ReadVariableRawData(data, slot_accessor);
+@@ -935,6 +964,11 @@ int Deserializer<IsolateT>::ReadSingleBytecodeData(uint8_t data,
+   // The above switch, including UNUSED_SERIALIZER_BYTE_CODES, covers all
+   // possible bytecodes; but, clang doesn't realize this, so we have an explicit
+   // UNREACHABLE here too.
++  if (deserializing_user_code()) {
++    // Stream desync during JSC deserialization — write undefined fallback.
++    Tagged<HeapObject> fallback = ReadOnlyRoots(isolate()).undefined_value();
++    return slot_accessor.Write(fallback, HeapObjectReferenceType::STRONG, 0);
++  }
+   UNREACHABLE();
+ }
+
+@@ -972,6 +1006,14 @@ int Deserializer<IsolateT>::ReadReadOnlyHeapRef(uint8_t data,
+   uint32_t chunk_offset = source_.GetUint30();
+
+   ReadOnlySpace* read_only_space = isolate()->heap()->read_only_space();
++
++  if (deserializing_user_code() &&
++      chunk_index >= read_only_space->pages().size()) {
++    Tagged<HeapObject> fallback = ReadOnlyRoots(isolate()).undefined_value();
++    return WriteHeapPointer(slot_accessor, fallback,
++                            GetAndResetNextReferenceDescriptor());
++  }
++
+   ReadOnlyPageMetadata* page = read_only_space->pages()[chunk_index];
+   Address address = page->OffsetToAddress(chunk_offset);
+   Tagged<HeapObject> heap_object = HeapObject::FromAddress(address);
+diff --git a/src/snapshot/object-deserializer.cc b/src/snapshot/object-deserializer.cc
+index 6886fb3a5b6..a40f4dc54e8 100644
+--- a/src/snapshot/object-deserializer.cc
++++ b/src/snapshot/object-deserializer.cc
+@@ -45,7 +45,7 @@ MaybeHandle<HeapObject> ObjectDeserializer::Deserialize() {
+     WeakenDescriptorArrays();
+   }
+
+-  Rehash();
++  // Rehash();
+   CommitPostProcessedObjects();
+   return scope.CloseAndEscape(result);
+ }

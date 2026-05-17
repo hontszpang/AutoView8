@@ -7,8 +7,12 @@
 
 #include "include/v8.h"
 #include "include/libplatform/libplatform.h"
+#include "src/codegen/script-details.h"
 #include "src/codegen/cpu-features.h"
 #include "src/flags/flags.h"
+#include "src/handles/handles.h"
+#include "src/objects/shared-function-info.h"
+#include "src/snapshot/code-serializer.h"
 
 using namespace v8;
 
@@ -71,43 +75,27 @@ static void loadBytecode(uint8_t* bytecodeBuffer, int length) {
             << " is_module=" << (is_module ? 1 : 0) << "\n";
   std::cout << "[v8dasm] creating CachedData\n" << std::flush;
 
-  // Load code into code cache.
-  ScriptCompiler::CachedData* cached_data =
-      new ScriptCompiler::CachedData(bytecodeBuffer, length);
+  auto* i_isolate = reinterpret_cast<v8::internal::Isolate*>(isolate);
+  v8::internal::AlignedCachedData cached_data(bytecodeBuffer, length);
+  v8::internal::Handle<v8::internal::String> source =
+      i_isolate->factory()
+          ->NewStringFromUtf8(v8::base::CStrVector("source"))
+          .ToHandleChecked();
+  v8::ScriptOriginOptions origin_options(false, false, false, is_module);
 
-  // Create dummy source.
-  std::cout << "[v8dasm] creating dummy source\n" << std::flush;
-  ScriptOrigin origin = CreateScriptOrigin(
-      String::NewFromUtf8Literal(isolate, "code.jsc"), 0, 0, false, -1,
-      Local<Value>(), false, false, is_module);
-
-  std::string fake_source(source_length, ' ');
-  Local<String> source_string =
-      String::NewFromUtf8(isolate, fake_source.c_str(),
-                          NewStringType::kNormal,
-                          static_cast<int>(fake_source.size()))
-          .ToLocalChecked();
-  ScriptCompiler::Source source(source_string, origin, cached_data);
-
-  // Compile code from code cache to print disassembly.
-  std::cout << "[v8dasm] CompileUnboundScript begin\n" << std::flush;
-  bool compile_empty = false;
-  if (is_module) {
-    MaybeLocal<Module> module = ScriptCompiler::CompileModule(
-        isolate, &source, ScriptCompiler::kConsumeCodeCache);
-    compile_empty = module.IsEmpty();
+  std::cout << "[v8dasm] CodeSerializer::Deserialize begin\n" << std::flush;
+  v8::internal::MaybeHandle<v8::internal::SharedFunctionInfo> maybe_fun =
+      v8::internal::CodeSerializer::Deserialize(i_isolate, &cached_data, source,
+                                                origin_options);
+  v8::internal::Handle<v8::internal::SharedFunctionInfo> fun;
+  const bool deserialize_empty = !maybe_fun.ToHandle(&fun);
+  std::cout << "[v8dasm] CodeSerializer::Deserialize end\n" << std::flush;
+  if (deserialize_empty) {
+    std::cout << "[v8dasm] deserialize returned empty"
+              << ", rejected=" << cached_data.rejected() << "\n";
   } else {
-    MaybeLocal<UnboundScript> script = ScriptCompiler::CompileUnboundScript(
-        isolate, &source, ScriptCompiler::kConsumeCodeCache);
-    compile_empty = script.IsEmpty();
-  }
-  std::cout << "[v8dasm] CompileUnboundScript end\n" << std::flush;
-  if (compile_empty) {
-    std::cout << "[v8dasm] compile returned empty script"
-              << ", rejected=" << cached_data->rejected << "\n";
-  } else {
-    std::cout << "[v8dasm] compile returned script"
-              << ", rejected=" << cached_data->rejected << "\n";
+    std::cout << "[v8dasm] deserialize returned SharedFunctionInfo"
+              << ", rejected=" << cached_data.rejected() << "\n";
   }
 }
 
