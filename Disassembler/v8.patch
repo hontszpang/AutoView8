@@ -93,7 +93,7 @@ index 3bfb418520a..72852f678fe 100644
    accumulator->Add(SuffixForDebugPrint());
    accumulator->Put('>');
 diff --git a/src/snapshot/code-serializer.cc b/src/snapshot/code-serializer.cc
-index 23463d26b63..dfaed90cadf 100644
+index 23463d26b63..043101d1d53 100644
 --- a/src/snapshot/code-serializer.cc
 +++ b/src/snapshot/code-serializer.cc
 @@ -4,6 +4,7 @@
@@ -109,7 +109,7 @@ index 23463d26b63..dfaed90cadf 100644
    }
  
 +  std::cout << "\nStart SharedFunctionInfo\n";
-+  std::cout << Brief(*result) << "\n";
++  std::cout << "<SharedFunctionInfo>\n";
 +  if (result->HasBytecodeArray()) {
 +    std::cout << "Start BytecodeArray\n";
 +    result->GetActiveBytecodeArray(isolate)->Disassemble(std::cout);
