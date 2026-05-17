@@ -74,6 +74,28 @@ index fd1d8f33432..c8255c8dd01 100644
    }
  #endif
  }
+diff --git a/src/flags/flags.cc b/src/flags/flags.cc
+index 7940f397fb0..f3f48fd4c8c 100644
+--- a/src/flags/flags.cc
++++ b/src/flags/flags.cc
+@@ -12,6 +12,7 @@
+ #include <cstring>
+ #include <iomanip>
++#include <iostream>
+ #include <set>
+ #include <sstream>
+ 
+ #include "src/base/functional.h"
+@@ -508,6 +509,9 @@ uint32_t ComputeFlagListHash() {
+ #endif
+ 
+   std::string args(modified_args_as_string.str());
++  std::cout << "[v8dasm] ComputeFlagListHash input_len=" << args.size()
++            << " input=" << args << "\n"
++            << std::flush;
+   // Generate a hash that is not 0.
+   uint32_t hash = static_cast<uint32_t>(base::hash_range(
+                       args.c_str(), args.c_str() + args.length())) |
 diff --git a/src/objects/string.cc b/src/objects/string.cc
 index 3bfb418520a..72852f678fe 100644
 --- a/src/objects/string.cc
