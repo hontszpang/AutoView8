@@ -1,5 +1,6 @@
 #include <fstream>
 #include <iostream>
+#include <limits>
 #include <string>
 #include <cstdlib>
 
@@ -34,10 +35,10 @@ static void applyCpuFeaturesOverrideFromEnv() {
 // Compatibility with v8 versions that have different ScriptOrigin constructors
 template <typename... Args>
 ScriptOrigin CreateScriptOrigin(Args&&... args) {
-  if constexpr (std::is_constructible_v<ScriptOrigin, Isolate*, Local<String>>) {
-      return ScriptOrigin(isolate, std::forward<Args>(args)...);
-  } else {
+  if constexpr (std::is_constructible_v<ScriptOrigin, Args...>) {
       return ScriptOrigin(std::forward<Args>(args)...);
+  } else {
+      return ScriptOrigin(isolate, std::forward<Args>(args)...);
   }
 }
 
@@ -137,5 +138,9 @@ int main(int argc, char* argv[]) {
   if (!readAllBytes(argv[1], data)) {
     return 2;
   }
-  loadBytecode((uint8_t*)data.data(), data.size());
+  if (data.size() > static_cast<size_t>(std::numeric_limits<int>::max())) {
+    std::cerr << "[v8dasm] input too large: " << data.size() << " bytes\n";
+    return 2;
+  }
+  loadBytecode((uint8_t*)data.data(), static_cast<int>(data.size()));
 }
