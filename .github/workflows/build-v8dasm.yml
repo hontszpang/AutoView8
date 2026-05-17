@@ -38,6 +38,7 @@ jobs:
 
   build-macos-arm:
     name: macOS ARM64 - V8 ${{ matrix.version.v8 }}
+    if: false
     runs-on: macos-14
     needs: prepare
     strategy:
@@ -82,6 +83,7 @@ jobs:
 
   build-windows:
     name: Windows x64 - V8 ${{ matrix.version.v8 }}
+    if: false
     runs-on: windows-2022
     needs: prepare
     strategy:
@@ -180,7 +182,7 @@ jobs:
   release:
     name: Create Release
     runs-on: ubuntu-latest
-    needs: [build-macos-arm, build-windows, build-android-arm64]
+    needs: [build-android-arm64]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     steps:
       - uses: actions/checkout@v4
