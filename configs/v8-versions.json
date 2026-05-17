@@ -3,7 +3,7 @@
     {
       "v8_version": "12.4.254.21",
       "node_version": "game-libssr",
-      "build_args": "v8_target_cpu=\"arm64\" v8_enable_pointer_compression=false v8_enable_sandbox=false v8_enable_31bit_smis_on_64bit_arch=false v8_enable_short_builtin_calls=false"
+      "build_args": "v8_enable_pointer_compression=false v8_enable_sandbox=false v8_enable_31bit_smis_on_64bit_arch=false v8_enable_short_builtin_calls=false"
     }
   ]
 }
