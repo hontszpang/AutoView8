@@ -1,68 +1,79 @@
-diff --git a/src/diagnostics/objects-printer.cc b/src/diagnostics/objects-printer.cc
-index 7677022ce31..b713e6377bf 100644
---- a/src/diagnostics/objects-printer.cc
-+++ b/src/diagnostics/objects-printer.cc
-@@ -2022,7 +2022,10 @@ void SharedFunctionInfo::SharedFunctionInfoPrint(std::ostream& os) {
-   } else {
-     os << kUnavailableString;
+diff --git a/src/objects/bytecode-array.cc b/src/objects/bytecode-array.cc
+index fd1d8f33432..c8255c8dd01 100644
+--- a/src/objects/bytecode-array.cc
++++ b/src/objects/bytecode-array.cc
+@@ -4,6 +4,7 @@
+ 
+ #include "src/objects/bytecode-array.h"
+ 
++#include <cstdlib>
+ #include <iomanip>
+ 
+ #include "src/codegen/handler-table.h"
+@@ -138,21 +139,55 @@ void BytecodeArray::Disassemble(Handle<BytecodeArray> handle,
    }
--  PrintSourceCode(os);
-+  os << "\nStart BytecodeArray\n";
-+  this->GetActiveBytecodeArray(isolate)->Disassemble(os);
-+  os << "\nEnd BytecodeArray\n";
-+  os << std::flush;
-   // Script files are often large, thus only print their {Brief} representation.
-   os << "\n - script: " << Brief(script());
-   os << "\n - function token position: " << function_token_position();
-@@ -2980,6 +2983,13 @@ void HeapObject::HeapObjectShortPrint(std::ostream& os) {
-     os << accumulator.ToCString().get();
-     return;
-   }
-+  if (map(cage_base)->instance_type() == ASM_WASM_DATA_TYPE) {
-+    os << "<ArrayBoilerplateDescription> ";
-+    ArrayBoilerplateDescription::cast(*this)
-+        ->constant_elements()
-+        ->HeapObjectShortPrint(os);
-+    return;
+ #endif
+ 
+-  os << "Handler Table (size = " << handle->handler_table()->length() << ")\n";
++  int max_handler_table =
++      std::getenv("V8DASM_MAX_HANDLER_TABLE_BYTES") == nullptr
++          ? 4096
++          : std::atoi(std::getenv("V8DASM_MAX_HANDLER_TABLE_BYTES"));
++  int handler_table_length = 0;
++  bool handler_table_available = false;
++  PtrComprCageBase cage_base = GetPtrComprCageBase(*handle);
++  Tagged<Object> maybe_handler_table = handle->raw_handler_table(cage_base);
++  if (IsTrustedByteArray(maybe_handler_table)) {
++    handler_table_length = TrustedByteArray::cast(maybe_handler_table)->length();
++    handler_table_available = true;
 +  }
-   switch (map(cage_base)->instance_type()) {
-     case MAP_TYPE: {
-       Tagged<Map> map = Map::cast(*this);
-@@ -3072,14 +3082,24 @@ void HeapObject::HeapObjectShortPrint(std::ostream& os) {
-       break;
-     case FIXED_ARRAY_TYPE:
-       os << "<FixedArray[" << FixedArray::cast(*this)->length() << "]>";
-+      os << "\nStart FixedArray\n";
-+      FixedArray::cast(*this)->FixedArrayPrint(os);
-+      os << "\nEnd FixedArray\n";
-       break;
-     case OBJECT_BOILERPLATE_DESCRIPTION_TYPE:
-       os << "<ObjectBoilerplateDescription["
-          << ObjectBoilerplateDescription::cast(*this)->capacity() << "]>";
-+      os << "\nStart ObjectBoilerplateDescription\n";
-+      ObjectBoilerplateDescription::cast(*this)
-+          ->ObjectBoilerplateDescriptionPrint(os);
-+      os << "\nEnd ObjectBoilerplateDescription\n";
-       break;
-     case FIXED_DOUBLE_ARRAY_TYPE:
-       os << "<FixedDoubleArray[" << FixedDoubleArray::cast(*this)->length()
-          << "]>";
-+      os << "\nStart FixedDoubleArray\n";
-+      FixedDoubleArray::cast(*this)->FixedDoubleArrayPrint(os);
-+      os << "\nEnd FixedDoubleArray\n";
-       break;
-     case BYTE_ARRAY_TYPE:
-       os << "<ByteArray[" << ByteArray::cast(*this)->length() << "]>";
-@@ -3162,6 +3182,9 @@ void HeapObject::HeapObjectShortPrint(std::ostream& os) {
-       } else {
-         os << "<SharedFunctionInfo>";
-       }
-+      os << "\nStart SharedFunctionInfo\n";
-+      shared->SharedFunctionInfoPrint(os);
-+      os << "\nEnd SharedFunctionInfo\n";
-       break;
-     }
-     case JS_MESSAGE_OBJECT_TYPE:
++
++  os << "Handler Table (size = " << handler_table_length;
++  if (!handler_table_available) os << ", unavailable";
++  if (handler_table_length > max_handler_table) os << ", skipped";
++  os << ")\n";
+ #ifdef ENABLE_DISASSEMBLER
+-  if (handle->handler_table()->length() > 0) {
++  if (handler_table_available && handler_table_length > 0 &&
++      handler_table_length <= max_handler_table) {
+     HandlerTable table(*handle);
+     table.HandlerTableRangePrint(os);
+   }
+ #endif
+ 
+-  Tagged<TrustedByteArray> source_position_table =
+-      handle->SourcePositionTable();
+-  os << "Source Position Table (size = " << source_position_table->length()
+-     << ")\n";
++  int max_source_position_table =
++      std::getenv("V8DASM_MAX_SOURCE_POSITION_TABLE_BYTES") == nullptr
++          ? 4096
++          : std::atoi(std::getenv("V8DASM_MAX_SOURCE_POSITION_TABLE_BYTES"));
++  int source_position_table_length = 0;
++  bool source_position_table_available = false;
++  Tagged<Object> maybe_source_position_table =
++      handle->raw_source_position_table(kAcquireLoad);
++  if (IsTrustedByteArray(maybe_source_position_table)) {
++    source_position_table_length =
++        TrustedByteArray::cast(maybe_source_position_table)->length();
++    source_position_table_available = true;
++  }
++  os << "Source Position Table (size = " << source_position_table_length;
++  if (!source_position_table_available) os << ", unavailable";
++  if (source_position_table_length > max_source_position_table) {
++    os << ", skipped";
++  }
++  os << ")\n";
+ #ifdef OBJECT_PRINT
+-  if (source_position_table->length() > 0) {
+-    os << Brief(source_position_table) << std::endl;
++  if (source_position_table_available && source_position_table_length > 0 &&
++      source_position_table_length <= max_source_position_table) {
++    os << Brief(TrustedByteArray::cast(maybe_source_position_table))
++       << std::endl;
+   }
+ #endif
+ }
 diff --git a/src/objects/string.cc b/src/objects/string.cc
 index 3bfb418520a..72852f678fe 100644
 --- a/src/objects/string.cc
@@ -82,7 +93,7 @@ index 3bfb418520a..72852f678fe 100644
    accumulator->Add(SuffixForDebugPrint());
    accumulator->Put('>');
 diff --git a/src/snapshot/code-serializer.cc b/src/snapshot/code-serializer.cc
-index 23463d26b63..75653e390ef 100644
+index 23463d26b63..dfaed90cadf 100644
 --- a/src/snapshot/code-serializer.cc
 +++ b/src/snapshot/code-serializer.cc
 @@ -4,6 +4,7 @@
@@ -93,19 +104,26 @@ index 23463d26b63..75653e390ef 100644
  #include <memory>
  
  #include "src/base/logging.h"
-@@ -473,6 +474,11 @@ MaybeHandle<SharedFunctionInfo> CodeSerializer::Deserialize(
+@@ -473,6 +474,18 @@ MaybeHandle<SharedFunctionInfo> CodeSerializer::Deserialize(
      return MaybeHandle<SharedFunctionInfo>();
    }
  
 +  std::cout << "\nStart SharedFunctionInfo\n";
-+  result->SharedFunctionInfoPrint(std::cout);
-+  std::cout << "\nEnd SharedFunctionInfo\n";
++  std::cout << Brief(*result) << "\n";
++  if (result->HasBytecodeArray()) {
++    std::cout << "Start BytecodeArray\n";
++    result->GetActiveBytecodeArray(isolate)->Disassemble(std::cout);
++    std::cout << "End BytecodeArray\n";
++  } else {
++    std::cout << "[v8dasm] SharedFunctionInfo has no active bytecode array\n";
++  }
++  std::cout << "End SharedFunctionInfo\n";
 +  std::cout << std::flush;
 +
    // Check whether the newly deserialized data should be merged into an
    // existing Script from the Isolate compilation cache. If so, perform
    // the merge in a single-threaded manner since this deserialization was
-@@ -687,10 +693,7 @@ SerializedCodeData::SerializedCodeData(const std::vector<uint8_t>* payload,
+@@ -687,10 +700,7 @@ SerializedCodeData::SerializedCodeData(const std::vector<uint8_t>* payload,
  SerializedCodeSanityCheckResult SerializedCodeData::SanityCheck(
      uint32_t expected_ro_snapshot_checksum,
      uint32_t expected_source_hash) const {
