@@ -3,6 +3,7 @@
 #include <limits>
 #include <string>
 #include <cstdlib>
+#include <vector>
 
 #include "include/v8.h"
 #include "include/libplatform/libplatform.h"
@@ -12,6 +13,14 @@
 using namespace v8;
 
 static Isolate* isolate = nullptr;
+
+static uint32_t readU32LE(const uint8_t* data, int length, int offset) {
+  if (offset < 0 || offset + 4 > length) return 0;
+  return static_cast<uint32_t>(data[offset]) |
+         (static_cast<uint32_t>(data[offset + 1]) << 8) |
+         (static_cast<uint32_t>(data[offset + 2]) << 16) |
+         (static_cast<uint32_t>(data[offset + 3]) << 24);
+}
 
 static void applyCpuFeaturesOverrideFromEnv() {
   const char* value = std::getenv("V8DASM_CPU_FEATURES_HEX");
@@ -44,6 +53,22 @@ ScriptOrigin CreateScriptOrigin(Args&&... args) {
 
 static void loadBytecode(uint8_t* bytecodeBuffer, int length) {
   std::cout << "[v8dasm] cached data size: " << length << " bytes\n";
+  const uint32_t cache_magic = readU32LE(bytecodeBuffer, length, 0);
+  const uint32_t cache_version_hash = readU32LE(bytecodeBuffer, length, 4);
+  const uint32_t cache_source_hash = readU32LE(bytecodeBuffer, length, 8);
+  const uint32_t cache_flag_hash = readU32LE(bytecodeBuffer, length, 12);
+  const uint32_t cache_ro_checksum = readU32LE(bytecodeBuffer, length, 16);
+  const uint32_t cache_payload_length = readU32LE(bytecodeBuffer, length, 20);
+  const uint32_t source_length = cache_source_hash & 0x7fffffffU;
+  const bool is_module = (cache_source_hash & 0x80000000U) != 0;
+  std::cout << "[v8dasm] header magic=0x" << std::hex << cache_magic
+            << " version_hash=0x" << cache_version_hash
+            << " source_hash=0x" << cache_source_hash
+            << " flag_hash=0x" << cache_flag_hash
+            << " ro_checksum=0x" << cache_ro_checksum
+            << std::dec << " payload_length=" << cache_payload_length
+            << " source_length=" << source_length
+            << " is_module=" << (is_module ? 1 : 0) << "\n";
   std::cout << "[v8dasm] creating CachedData\n" << std::flush;
 
   // Load code into code cache.
@@ -52,17 +77,32 @@ static void loadBytecode(uint8_t* bytecodeBuffer, int length) {
 
   // Create dummy source.
   std::cout << "[v8dasm] creating dummy source\n" << std::flush;
-  ScriptOrigin origin = CreateScriptOrigin(String::NewFromUtf8Literal(isolate, "code.jsc"));
+  ScriptOrigin origin = CreateScriptOrigin(
+      String::NewFromUtf8Literal(isolate, "code.jsc"), 0, 0, false, -1,
+      Local<Value>(), false, false, is_module);
 
-  ScriptCompiler::Source source(String::NewFromUtf8Literal(isolate, "\"ಠ_ಠ\""),
-                                origin, cached_data);
+  std::string fake_source(source_length, ' ');
+  Local<String> source_string =
+      String::NewFromUtf8(isolate, fake_source.c_str(),
+                          NewStringType::kNormal,
+                          static_cast<int>(fake_source.size()))
+          .ToLocalChecked();
+  ScriptCompiler::Source source(source_string, origin, cached_data);
 
   // Compile code from code cache to print disassembly.
   std::cout << "[v8dasm] CompileUnboundScript begin\n" << std::flush;
-  MaybeLocal<UnboundScript> script = ScriptCompiler::CompileUnboundScript(
-      isolate, &source, ScriptCompiler::kConsumeCodeCache);
+  bool compile_empty = false;
+  if (is_module) {
+    MaybeLocal<Module> module = ScriptCompiler::CompileModule(
+        isolate, &source, ScriptCompiler::kConsumeCodeCache);
+    compile_empty = module.IsEmpty();
+  } else {
+    MaybeLocal<UnboundScript> script = ScriptCompiler::CompileUnboundScript(
+        isolate, &source, ScriptCompiler::kConsumeCodeCache);
+    compile_empty = script.IsEmpty();
+  }
   std::cout << "[v8dasm] CompileUnboundScript end\n" << std::flush;
-  if (script.IsEmpty()) {
+  if (compile_empty) {
     std::cout << "[v8dasm] compile returned empty script"
               << ", rejected=" << cached_data->rejected << "\n";
   } else {
