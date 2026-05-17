@@ -108,7 +108,7 @@ GN
 fi
 
 echo "=====[ Configuring V8 Build for Android ARM64 ]====="
-GN_ARGS='target_os="android" target_cpu="arm64" v8_target_cpu="arm64" is_component_build=false is_debug=false v8_monolithic=true v8_static_library=true v8_enable_disassembler=true v8_enable_object_print=true v8_use_external_startup_data=false v8_enable_pointer_compression=false v8_enable_sandbox=false v8_enable_31bit_smis_on_64bit_arch=false v8_enable_short_builtin_calls=false dcheck_always_on=false symbol_level=0 v8_android_log_stdout=true'
+GN_ARGS='target_os="android" target_cpu="arm64" v8_target_cpu="arm64" is_component_build=false is_debug=false v8_monolithic=true v8_static_library=true v8_enable_disassembler=true v8_enable_object_print=true v8_use_external_startup_data=false v8_enable_pointer_compression=false v8_enable_sandbox=false v8_enable_31bit_smis_on_64bit_arch=false v8_enable_short_builtin_calls=false dcheck_always_on=false symbol_level=1 strip_debug_info=false v8_android_log_stdout=true'
 
 if [ -n "$BUILD_ARGS" ]; then
     GN_ARGS="$GN_ARGS $BUILD_ARGS"
@@ -127,13 +127,16 @@ chmod +x "$OUTPUT_NAME"
 D8_OUTPUT_NAME="d8-$V8_VERSION-android-arm64"
 cp out.gn/android_arm64.release/d8 "$D8_OUTPUT_NAME"
 chmod +x "$D8_OUTPUT_NAME"
+cp out.gn/android_arm64.release/d8 "$D8_OUTPUT_NAME.sym"
 
-if [ -f "$OUTPUT_NAME" ] && [ -f "$D8_OUTPUT_NAME" ]; then
+if [ -f "$OUTPUT_NAME" ] && [ -f "$D8_OUTPUT_NAME" ] && [ -f "$D8_OUTPUT_NAME.sym" ]; then
     echo "=====[ Build Successful ]====="
     ls -lh "$OUTPUT_NAME"
     ls -lh "$D8_OUTPUT_NAME"
+    ls -lh "$D8_OUTPUT_NAME.sym"
     file "$OUTPUT_NAME"
     file "$D8_OUTPUT_NAME"
+    file "$D8_OUTPUT_NAME.sym"
     echo "Built: $V8_DIR/$OUTPUT_NAME"
     echo "Built: $V8_DIR/$D8_OUTPUT_NAME"
 else
