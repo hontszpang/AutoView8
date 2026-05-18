@@ -104,9 +104,8 @@ replacement = """  va_list arguments;
 
   if (strcmp(format, v8::base::kUnreachableCodeMessage) == 0) {
     void* caller0 = __builtin_return_address(0);
-    void* caller1 = __builtin_return_address(1);
     v8::base::OS::PrintError(
-        "\\n[unreachable-trace] caller0=%p caller1=%p\\n", caller0, caller1);
+        "\\n[unreachable-trace] caller0=%p\\n", caller0);
   }
 """
 if needle not in text:
