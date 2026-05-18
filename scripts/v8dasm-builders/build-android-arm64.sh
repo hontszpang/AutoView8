@@ -132,6 +132,17 @@ PY
 echo "=====[ Adding Android v8dasm GN target ]====="
 cp "$WORKSPACE_DIR/Disassembler/v8dasm.cpp" tools/v8dasm.cpp
 
+python3 - <<'PY'
+from pathlib import Path
+
+path = Path("BUILD.gn")
+text = path.read_text(encoding="utf-8")
+needle = 'v8_executable("d8") {\n'
+if 'ldflags = [ "-Wl,-Map=d8.map" ]' not in text:
+    text = text.replace(needle, needle + '  ldflags = [ "-Wl,-Map=d8.map" ]\n', 1)
+path.write_text(text, encoding="utf-8")
+PY
+
 if ! grep -q 'v8_executable("v8dasm")' BUILD.gn; then
     cat >> BUILD.gn <<'GN'
 
@@ -171,13 +182,16 @@ chmod +x "$OUTPUT_NAME"
 D8_OUTPUT_NAME="d8-$V8_VERSION-android-arm64"
 cp out.gn/android_arm64.release/d8 "$D8_OUTPUT_NAME"
 chmod +x "$D8_OUTPUT_NAME"
+cp out.gn/android_arm64.release/d8.map "$D8_OUTPUT_NAME.map"
 
-if [ -f "$OUTPUT_NAME" ] && [ -f "$D8_OUTPUT_NAME" ]; then
+if [ -f "$OUTPUT_NAME" ] && [ -f "$D8_OUTPUT_NAME" ] && [ -f "$D8_OUTPUT_NAME.map" ]; then
     echo "=====[ Build Successful ]====="
     ls -lh "$OUTPUT_NAME"
     ls -lh "$D8_OUTPUT_NAME"
+    ls -lh "$D8_OUTPUT_NAME.map"
     file "$OUTPUT_NAME"
     file "$D8_OUTPUT_NAME"
+    file "$D8_OUTPUT_NAME.map"
     echo "Built: $V8_DIR/$OUTPUT_NAME"
     echo "Built: $V8_DIR/$D8_OUTPUT_NAME"
 else
