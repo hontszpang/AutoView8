@@ -182,7 +182,6 @@ jobs:
           path: |
             v8/v8/v8dasm-${{ matrix.version.v8 }}-android-arm64
             v8/v8/d8-${{ matrix.version.v8 }}-android-arm64
-            v8/v8/d8-${{ matrix.version.v8 }}-android-arm64.sym
           retention-days: 30
 
   release:
@@ -212,7 +211,7 @@ jobs:
             if [ -f v8dasm-${version}.exe ]; then
               zip ../../release/${platform}-${version}.zip v8dasm-${version}.exe
             elif [ -f v8dasm-${version}-android-arm64 ]; then
-              zip ../../release/${platform}-${version}.zip v8dasm-${version}-android-arm64 d8-${version}-android-arm64 d8-${version}-android-arm64.sym
+              zip ../../release/${platform}-${version}.zip v8dasm-${version}-android-arm64 d8-${version}-android-arm64
             elif [ -f v8dasm-${version} ]; then
               zip ../../release/${platform}-${version}.zip v8dasm-${version}
             fi
