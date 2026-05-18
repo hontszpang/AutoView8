@@ -94,15 +94,31 @@ index 715ee06c0d0..c13dec0d5ba 100644
 +    v8::internal::PrintF("[loadjsc] read %s size=%d\n", *filename, length);
 +    fflush(stdout);
 +    v8::internal::AlignedCachedData cached_data(filedata, length);
++    uint32_t source_hash = 0;
++    if (length >= 12) {
++      source_hash = static_cast<uint32_t>(filedata[8]) |
++                    (static_cast<uint32_t>(filedata[9]) << 8) |
++                    (static_cast<uint32_t>(filedata[10]) << 16) |
++                    (static_cast<uint32_t>(filedata[11]) << 24);
++    }
++    static constexpr uint32_t kModuleFlagMask = (1u << 31);
++    uint32_t source_length = source_hash & ~kModuleFlagMask;
++    bool is_module = (source_hash & kModuleFlagMask) != 0;
++    std::string fake_source(source_length, ' ');
 +    auto source = isolate->factory()
-+                      ->NewStringFromUtf8(base::CStrVector("source"))
++                      ->NewStringFromOneByte(base::Vector<const uint8_t>(
++                          reinterpret_cast<const uint8_t*>(fake_source.data()),
++                          static_cast<int>(fake_source.size())))
 +                      .ToHandleChecked();
++    v8::internal::PrintF("[loadjsc] source_hash=0x%08x source_length=%u is_module=%d\n",
++                         source_hash, source_length, is_module ? 1 : 0);
++    fflush(stdout);
 +    v8::internal::PrintF("[loadjsc] deserialize begin\n");
 +    fflush(stdout);
 +    v8::internal::MaybeHandle<v8::internal::SharedFunctionInfo> maybe_fun =
 +      v8::internal::CodeSerializer::Deserialize(
 +          isolate, &cached_data, source,
-+          v8::ScriptOriginOptions(false, false, false, false));
++          v8::ScriptOriginOptions(false, false, false, is_module));
 +    v8::internal::PrintF("[loadjsc] deserialize end rejected=%d\n", cached_data.rejected());
 +    fflush(stdout);
 +
