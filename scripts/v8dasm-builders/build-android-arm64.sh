@@ -139,7 +139,11 @@ path = Path("BUILD.gn")
 text = path.read_text(encoding="utf-8")
 needle = 'v8_executable("d8") {\n'
 if 'ldflags += [ "-Wl,-Map=d8.map" ]' not in text:
-    text = text.replace(needle, needle + '  ldflags += [ "-Wl,-Map=d8.map" ]\n', 1)
+    text = text.replace(
+        needle,
+        needle + '  if (!defined(ldflags)) {\n    ldflags = []\n  }\n  ldflags += [ "-Wl,-Map=d8.map" ]\n',
+        1,
+    )
 path.write_text(text, encoding="utf-8")
 PY
 
