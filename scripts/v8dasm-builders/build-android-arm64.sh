@@ -86,7 +86,10 @@ d8cc.write_text(text, encoding="utf-8")
 
 deserializer = Path("src/snapshot/deserializer.cc")
 text = deserializer.read_text(encoding="utf-8")
-text = text.replace(
+start = text.index("class SlotAccessorForHandle")
+end = text.index("template <typename IsolateT>\nint Deserializer<IsolateT>::WriteHeapPointer", start)
+prefix, block, suffix = text[:start], text[start:end], text[end:]
+block = block.replace(
     "  int Write(Tagged<MaybeObject> value, int slot_offset = 0) { UNREACHABLE(); }\n",
     "  int Write(Tagged<MaybeObject> value, int slot_offset = 0) {\n"
     "    DCHECK_EQ(slot_offset, 0);\n"
@@ -95,7 +98,7 @@ text = text.replace(
     "  }\n",
     1,
 )
-text = text.replace(
+block = block.replace(
     "  int WriteIndirectPointerTo(Tagged<HeapObject> value) { UNREACHABLE(); }\n"
     "  int WriteProtectedPointerTo(Tagged<TrustedObject> value) { UNREACHABLE(); }\n",
     "  int WriteIndirectPointerTo(Tagged<HeapObject> value) {\n"
@@ -108,6 +111,7 @@ text = text.replace(
     "  }\n",
     1,
 )
+text = prefix + block + suffix
 deserializer.write_text(text, encoding="utf-8")
 PY
 
