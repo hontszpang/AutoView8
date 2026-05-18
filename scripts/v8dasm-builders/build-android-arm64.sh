@@ -132,21 +132,6 @@ PY
 echo "=====[ Adding Android v8dasm GN target ]====="
 cp "$WORKSPACE_DIR/Disassembler/v8dasm.cpp" tools/v8dasm.cpp
 
-python3 - <<'PY'
-from pathlib import Path
-
-path = Path("BUILD.gn")
-text = path.read_text(encoding="utf-8")
-needle = 'v8_executable("d8") {\n'
-if 'ldflags += [ "-Wl,-Map=d8.map" ]' not in text:
-    text = text.replace(
-        needle,
-        needle + '  if (!defined(ldflags)) {\n    ldflags = []\n  }\n  ldflags += [ "-Wl,-Map=d8.map" ]\n',
-        1,
-    )
-path.write_text(text, encoding="utf-8")
-PY
-
 if ! grep -q 'v8_executable("v8dasm")' BUILD.gn; then
     cat >> BUILD.gn <<'GN'
 
@@ -167,7 +152,7 @@ GN
 fi
 
 echo "=====[ Configuring V8 Build for Android ARM64 ]====="
-GN_ARGS='target_os="android" target_cpu="arm64" v8_target_cpu="arm64" is_component_build=false is_debug=false v8_monolithic=true v8_static_library=true v8_enable_disassembler=true v8_enable_object_print=true v8_use_external_startup_data=false v8_enable_pointer_compression=false v8_enable_sandbox=false v8_enable_31bit_smis_on_64bit_arch=false v8_enable_short_builtin_calls=false dcheck_always_on=false symbol_level=0 v8_android_log_stdout=true'
+GN_ARGS='target_os="android" target_cpu="arm64" v8_target_cpu="arm64" is_component_build=false is_debug=false v8_monolithic=true v8_static_library=true v8_enable_disassembler=true v8_enable_object_print=true v8_use_external_startup_data=false v8_enable_pointer_compression=false v8_enable_sandbox=false v8_enable_31bit_smis_on_64bit_arch=false v8_enable_short_builtin_calls=false dcheck_always_on=false symbol_level=0 v8_android_log_stdout=true extra_ldflags="-Wl,-Map=d8.map"'
 
 if [ -n "$BUILD_ARGS" ]; then
     GN_ARGS="$GN_ARGS $BUILD_ARGS"
