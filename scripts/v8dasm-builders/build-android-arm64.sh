@@ -112,6 +112,20 @@ block = block.replace(
     1,
 )
 text = prefix + block + suffix
+tags = {
+    "ExternalPointerSlot external_pointer_slot(ExternalPointerTag tag) const {\n    UNREACHABLE();\n  }":
+        "ExternalPointerSlot external_pointer_slot(ExternalPointerTag tag) const {\n    PrintF(\"[deserialize-unreachable] root external_pointer_slot\\\\n\"); fflush(stdout);\n    UNREACHABLE();\n  }",
+    "Handle<HeapObject> object() const { UNREACHABLE(); }\n  int offset() const { UNREACHABLE(); }":
+        "Handle<HeapObject> object() const { PrintF(\"[deserialize-unreachable] object accessor\\\\n\"); fflush(stdout); UNREACHABLE(); }\n  int offset() const { PrintF(\"[deserialize-unreachable] offset accessor\\\\n\"); fflush(stdout); UNREACHABLE(); }",
+    "int WriteIndirectPointerTo(Tagged<HeapObject> value) { UNREACHABLE(); }\n  int WriteProtectedPointerTo(Tagged<TrustedObject> value) { UNREACHABLE(); }":
+        "int WriteIndirectPointerTo(Tagged<HeapObject> value) { PrintF(\"[deserialize-unreachable] root indirect pointer\\\\n\"); fflush(stdout); UNREACHABLE(); }\n  int WriteProtectedPointerTo(Tagged<TrustedObject> value) { PrintF(\"[deserialize-unreachable] root protected pointer\\\\n\"); fflush(stdout); UNREACHABLE(); }",
+    "MaybeObjectSlot slot() const { UNREACHABLE(); }\n  ExternalPointerSlot external_pointer_slot(ExternalPointerTag tag) const {\n    UNREACHABLE();\n  }":
+        "MaybeObjectSlot slot() const { PrintF(\"[deserialize-unreachable] handle slot\\\\n\"); fflush(stdout); UNREACHABLE(); }\n  ExternalPointerSlot external_pointer_slot(ExternalPointerTag tag) const {\n    PrintF(\"[deserialize-unreachable] handle external_pointer_slot\\\\n\"); fflush(stdout);\n    UNREACHABLE();\n  }",
+    "void Deserializer<LocalIsolate>::PostProcessNewJSReceiver(\n    Tagged<Map> map, Handle<JSReceiver> obj, InstanceType instance_type,\n    SnapshotSpace space) {\n  UNREACHABLE();\n}":
+        "void Deserializer<LocalIsolate>::PostProcessNewJSReceiver(\n    Tagged<Map> map, Handle<JSReceiver> obj, InstanceType instance_type,\n    SnapshotSpace space) {\n  PrintF(\"[deserialize-unreachable] LocalIsolate::PostProcessNewJSReceiver\\\\n\"); fflush(stdout);\n  UNREACHABLE();\n}",
+}
+for needle, replacement in tags.items():
+    text = text.replace(needle, replacement, 1)
 deserializer.write_text(text, encoding="utf-8")
 PY
 
