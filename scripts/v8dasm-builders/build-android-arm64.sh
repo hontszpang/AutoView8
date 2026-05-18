@@ -84,17 +84,35 @@ if "#include <unordered_set>" not in text:
     text = text.replace("#include <unordered_map>\n", "#include <unordered_map>\n#include <unordered_set>\n", 1)
 d8cc.write_text(text, encoding="utf-8")
 
-logging_h = Path("src/base/logging.h")
-text = logging_h.read_text(encoding="utf-8")
-needle = "#define UNREACHABLE() FATAL(::v8::base::kUnreachableCodeMessage)"
-replacement = (
-    "#define UNREACHABLE() "
-    'FATAL("unreachable code at %s:%d", __FILE__, __LINE__)'
-)
+logging_cc = Path("src/base/logging.cc")
+text = logging_cc.read_text(encoding="utf-8")
+if "#include <cstring>" not in text:
+    text = text.replace("#include <cstdarg>\n", "#include <cstdarg>\n#include <cstring>\n", 1)
+needle = """  va_list arguments;
+  va_start(arguments, format);
+  // Format the error message into a stack object for later retrieveal by the
+  // crash processor.
+  FailureMessage message(format, arguments);
+  va_end(arguments);
+"""
+replacement = """  va_list arguments;
+  va_start(arguments, format);
+  // Format the error message into a stack object for later retrieveal by the
+  // crash processor.
+  FailureMessage message(format, arguments);
+  va_end(arguments);
+
+  if (strcmp(format, v8::base::kUnreachableCodeMessage) == 0) {
+    void* caller0 = __builtin_return_address(0);
+    void* caller1 = __builtin_return_address(1);
+    v8::base::OS::PrintError(
+        "\\n[unreachable-trace] caller0=%p caller1=%p\\n", caller0, caller1);
+  }
+"""
 if needle not in text:
-    raise SystemExit("UNREACHABLE macro patch point not found")
+    raise SystemExit("V8_Fatal patch point not found")
 text = text.replace(needle, replacement, 1)
-logging_h.write_text(text, encoding="utf-8")
+logging_cc.write_text(text, encoding="utf-8")
 
 deserializer = Path("src/snapshot/deserializer.cc")
 text = deserializer.read_text(encoding="utf-8")
