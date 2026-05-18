@@ -142,6 +142,29 @@ block = block.replace(
 )
 text = prefix + block + suffix
 deserializer.write_text(text, encoding="utf-8")
+
+string_inl = Path("src/objects/string-inl.h")
+text = string_inl.read_text(encoding="utf-8")
+needle = """    static inline uint16_t HandleInvalidString(
+        Tagged<String> str, int index,
+        const SharedStringAccessGuardIfNeeded& access_guard) {
+      UNREACHABLE();
+    }
+"""
+replacement = """    static inline uint16_t HandleInvalidString(
+        Tagged<String> str, int index,
+        const SharedStringAccessGuardIfNeeded& access_guard) {
+      uint32_t instance_type = str->map()->instance_type();
+      PrintF("[string-invalid] instance_type=0x%x index=%d length=%d\\n",
+             instance_type, index, str->length());
+      fflush(stdout);
+      return static_cast<uint16_t>(' ');
+    }
+"""
+if needle not in text:
+    raise SystemExit("String::GetImpl invalid string patch point not found")
+text = text.replace(needle, replacement, 1)
+string_inl.write_text(text, encoding="utf-8")
 PY
 
 echo "=====[ Adding Android v8dasm GN target ]====="
