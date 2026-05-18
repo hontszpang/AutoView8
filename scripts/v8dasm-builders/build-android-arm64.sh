@@ -84,6 +84,18 @@ if "#include <unordered_set>" not in text:
     text = text.replace("#include <unordered_map>\n", "#include <unordered_map>\n#include <unordered_set>\n", 1)
 d8cc.write_text(text, encoding="utf-8")
 
+logging_h = Path("src/base/logging.h")
+text = logging_h.read_text(encoding="utf-8")
+needle = "#define UNREACHABLE() FATAL(::v8::base::kUnreachableCodeMessage)"
+replacement = (
+    "#define UNREACHABLE() "
+    'FATAL("unreachable code at %s:%d", __FILE__, __LINE__)'
+)
+if needle not in text:
+    raise SystemExit("UNREACHABLE macro patch point not found")
+text = text.replace(needle, replacement, 1)
+logging_h.write_text(text, encoding="utf-8")
+
 deserializer = Path("src/snapshot/deserializer.cc")
 text = deserializer.read_text(encoding="utf-8")
 start = text.index("class SlotAccessorForHandle")
