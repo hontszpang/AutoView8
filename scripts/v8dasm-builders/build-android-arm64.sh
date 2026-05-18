@@ -87,7 +87,7 @@ d8cc.write_text(text, encoding="utf-8")
 deserializer = Path("src/snapshot/deserializer.cc")
 text = deserializer.read_text(encoding="utf-8")
 start = text.index("class SlotAccessorForHandle")
-end = text.index("template <typename IsolateT>\nint Deserializer<IsolateT>::WriteHeapPointer", start)
+end = text.index("\n};", start) + len("\n};")
 prefix, block, suffix = text[:start], text[start:end], text[end:]
 block = block.replace(
     "  int Write(Tagged<MaybeObject> value, int slot_offset = 0) { UNREACHABLE(); }\n",
